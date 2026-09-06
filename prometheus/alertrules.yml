@@ -1,0 +1,42 @@
+groups:
+  - name: "alerts-basicos"
+    rules:
+      # Instância/container caiu (ou ficou inacessível por 1 minuto)
+      - alert: "InstanciaForaDoAr"
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Monitoramento fora do ar ({{ $labels.instance }})"
+          description: "O alvo {{ $labels.instance }} do job {{ $labels.job }} está inacessível há mais de 1 minuto."
+
+      # CPU alta (Windows Exporter, média de 5 min acima de 80%)
+      - alert: "CPUAlta"
+        expr: 100 * (1 - sum(rate(windows_cpu_time_total{mode="idle"}[5m])) by (instance) / sum(rate(windows_cpu_time_total[5m])) by (instance)) > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "CPU acima de 80% em {{ $labels.instance }}"
+          description: "Uso de CPU está em {{ $value }}% nos últimos 5 minutos."
+
+      # Memória quase cheia (Windows Exporter, acima de 90% de uso)
+      - alert: "MemoriaQuaseCheia"
+        expr: 100 * (1 - (windows_memory_available_bytes / windows_memory_physical_total_bytes)) > 90
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Memória acima de 90% de uso em {{ $labels.instance }}"
+          description: "Uso de memória está em {{ $value }}%."
+
+      # Disco quase cheio (Windows Exporter, acima de 90%, só discos C:/D:)
+      - alert: "DiscoQuaseCheio"
+        expr: 100 * (1 - (windows_logical_disk_free_bytes{volume=~"[A-Z]:"} / windows_logical_disk_size_bytes{volume=~"[A-Z]:"})) > 90
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Disco acima de 90% de uso em {{ $labels.instance }} ({{ $labels.volume }})"
+          description: "Volume {{ $labels.volume }} está com {{ $value }}% de uso."

@@ -1,0 +1,43 @@
+global:
+  scrape_interval: 15s      # coleta a cada 15 segundos
+  evaluation_interval: 15s  # avalia alertas a cada 15 segundos
+
+# Configuração do Alertmanager (para onde os alertas vão)
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093
+
+# Regras de alerta (arquivo separado pro estudo ficar organizado)
+rule_files:
+  - "alertrules.yml"
+
+# ===== O QUE O PROMETHEUS VAI MONITORAR =====
+scrape_configs:
+  # O próprio Prometheus (auto-monitoramento)
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # Node Exporter = métricas do sistema operacional (CPU, RAM, disco, rede)
+  - job_name: "node_exporter"
+    static_configs:
+      - targets: ["node-exporter:9100"]
+
+  # cAdvisor = métricas dos containers Docker
+  - job_name: "cadvisor"
+    static_configs:
+      - targets: ["cadvisor:8080"]
+
+  # Windows Exporter = métricas REAIS do Windows (host físico)
+  # Roda como serviço nativo no Windows na porta 9182.
+  # host.docker.internal resolve pro host a partir de um container Linux no Docker Desktop.
+  - job_name: "windows_exporter"
+    static_configs:
+      - targets: ["host.docker.internal:9182"]
+
+  # Alertmanager
+  - job_name: "alertmanager"
+    static_configs:
+      - targets: ["alertmanager:9093"]

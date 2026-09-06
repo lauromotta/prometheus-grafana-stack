@@ -1,0 +1,11 @@
+# ----- Segredos / ambiente (NUNCA versionar) -----
+.env
+alertmanager/alertmanager.yml
+
+# ----- Arquivos locais -----
+*.local
+.DS_Store
+Thumbs.db
+
+# ----- Docker volumes / dados -----
+# (nada aqui no momento, mas deixa preparado)
