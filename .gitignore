@@ -14,6 +14,7 @@ security-exporter/grafana-pass.txt
 security-exporter/whitelist.ps1
 security-exporter/api-keys.ps1
 security-exporter/secintel-cache.json
+*.tmp
 Documento-Grafana/README.md
 
 # ----- Docker volumes / dados -----
