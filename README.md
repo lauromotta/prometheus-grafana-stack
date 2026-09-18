@@ -863,7 +863,35 @@ O watch-dog merece nota: `time() - windows_security_collector_last_run_timestamp
 está funcionando?"*. **Um monitor que morre em silêncio é pior que não ter
 monitor.**
 
-### 9.4 Limitações honestas
+### 9.4 Threat intelligence (VirusTotal + AbuseIPDB)
+
+Fechando parte do buraco "sinal ≠ detecção" com APIs gratuitas, **sem instalar
+nada**: o coletor consulta a nuvem sobre **apenas o que é novo** e cacheia o
+resultado, respeitando o free tier (VirusTotal: 4 req/min, 500/dia; AbuseIPDB:
+1.000 checks/dia).
+
+| Consulta | Quando | Resultado |
+|---|---|---|
+| VirusTotal, pelo **hash SHA256** do binário | processo fora da whitelist com conexão externa | veredito `malicious`/`suspicious`/`clean`/`nodetections`/`unknown` como label da métrica |
+| AbuseIPDB, pelo **IP de origem** | IP público que gerou falha de login (4625) | score 0–100 como valor |
+
+Novas métricas: `windows_security_unknown_process_vt{process,verdict}` e
+`windows_security_failed_login_ip_abuse_score{ip,fails}`. Quatro alertas
+novos (`ProcessoMaliciosoConfirmado`, `ProcessoSuspeitoConfirmado`,
+`IpMaliciosoTentandoLogin`, `IpSuspeitoTentandoLogin`) — o grupo
+`seguranca-rede` passa a 14 regras. O dashboard ganhou dois painéis de TI.
+
+Decisões de projeto:
+
+- **Chaves fora do repositório** (`api-keys.ps1` local; modelo com instruções
+  em `api-keys.example.ps1`) — mesma política da whitelist
+- **Cache obrigatório** (`secintel-cache.json`, fora do git): cada binário/IP
+  é consultado uma única vez; teto por coleta: 3 consultas VT + 10 AbuseIPDB
+- IP privado nas falhas de login não consulta (não gasta cota)
+- Veredito `nodetections` (ex.: 0/68 sem carimbo "harmless"): binário
+  provavelmente legítimo que VT não carimba — não alarmar por isso
+
+### 9.5 Limitações honestas
 
 - **Uma máquina só** — cobre este Windows, não o roteador nem a VM de produção.
 - **Sinal ≠ detecção** — um atacante que só usa processos whitelisted

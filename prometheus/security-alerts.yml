@@ -1,6 +1,54 @@
 groups:
   - name: "seguranca-rede"
     rules:
+      # ---------- Threat intelligence (VirusTotal / AbuseIPDB) ----------
+      - alert: "ProcessoMaliciosoConfirmado"
+        expr: windows_security_unknown_process_vt{verdict="malicious"} > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MALICIOSO confirmado: processo '{{ $labels.process }}' (VirusTotal)"
+          description: >-
+            O hash do processo '{{ $labels.process }}' (que esta conectado a internet e
+            fora da whitelist) foi classificado como MALICIOSO por multiplos antiviruses
+            no VirusTotal. Acao imediata: desconectar a maquina da rede, matar o processo,
+            remover o binario e trocar senhas.
+
+      - alert: "ProcessoSuspeitoConfirmado"
+        expr: windows_security_unknown_process_vt{verdict="suspicious"} > 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "SUSPEITO: processo '{{ $labels.process }}' (VirusTotal)"
+          description: >-
+            O hash do processo '{{ $labels.process }}' foi marcado como suspeito pelo
+            VirusTotal. Investigue o binario em virustotal.com antes de whitelista-lo.
+
+      - alert: "IpMaliciosoTentandoLogin"
+        expr: windows_security_failed_login_ip_abuse_score >= 50
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "IP conhecido por abuso tentando login: {{ $labels.ip }}"
+          description: >-
+            O IP {{ $labels.ip }} (score de abuso {{ $value }} no AbuseIPDB, {{ $labels.fails }}
+            falha(s) na janela de 5 min) esta tentando autenticar nesta maquina e ja e
+            reportado por scanning/brute-force. Considere bloquear no firewall.
+
+      - alert: "IpSuspeitoTentandoLogin"
+        expr: windows_security_failed_login_ip_abuse_score >= 20 and windows_security_failed_login_ip_abuse_score < 50
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "IP com score de abuso {{ $value }} tentando login: {{ $labels.ip }}"
+          description: >-
+            O IP {{ $labels.ip }} tem historico de abuso moderado no AbuseIPDB e falhou
+            login aqui. Monitore; se as tentativas persistirem, bloqueie no firewall.
+
       # ---------- Conexões suspeitas ----------
       - alert: "ProcessoDesconhecidoConectado"
         expr: windows_security_external_connections{known="false"} > 0

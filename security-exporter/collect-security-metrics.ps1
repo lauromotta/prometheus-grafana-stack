@@ -24,6 +24,7 @@ $LogFile      = 'D:\monitoring\security-exporter\coleta.log'
 # Caminho portatil: resolve %LOCALAPPDATA% em runtime (funciona em qualquer usuario)
 $ExporterExe  = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages\Prometheus.WindowsExporter_Microsoft.Winget.Source_8wekyb3d8bbwe\windows_exporter.exe'
 $ExporterPort = 9183
+$CacheFile    = Join-Path $PSScriptRoot 'secintel-cache.json'
 
 # Whitelist de processos autorizados a ter conexoes TCP com a internet.
 # Vem de whitelist.ps1 (arquivo PESSOAL, nao versionado; modelo em
@@ -88,6 +89,7 @@ $L = New-Object System.Collections.Generic.List[string]
 # ---- 1) Conexoes TCP estabelecidas com IPs externos (internet) ----
 $privateRe = '^(127\.|::1|0\.0\.0\.0|10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.|169\.254\.|fe80|fc|fd)'
 $nExternal = 0; $nUnknown = 0
+$unknownPaths = @{}
 try {
     $conns = @(Get-NetTCPConnection -State Established -ErrorAction Stop | Where-Object {
         $ip = ($_.RemoteAddress -replace '^::ffff:','')
@@ -99,9 +101,11 @@ try {
     AddLine $L '# HELP windows_security_external_connections Conexoes TCP estabelecidas com IPs da internet, por processo.'
     AddLine $L '# TYPE windows_security_external_connections gauge'
     foreach ($g in $byProc) {
-        $pname = (Get-Process -Id $g.Name -ErrorAction SilentlyContinue).ProcessName
+        $pobj = Get-Process -Id $g.Name -ErrorAction SilentlyContinue
+        $pname = $pobj.ProcessName
         if (-not $pname) { $pname = "pid_" + $g.Name }
         $known = $KnownProcesses -contains $pname.ToLower()
+        if (-not $known -and $pobj.Path -and -not $unknownPaths.ContainsKey($pname)) { $unknownPaths[$pname] = $pobj.Path }
         $k = 'true'; if (-not $known) { $k = 'false'; $nUnknown += $g.Count; $unknownNames += $pname }
         AddLine $L ('windows_security_external_connections{process="' + (Esc $pname) + '",known="' + $k + '"} ' + $g.Count)
     }
@@ -140,7 +144,8 @@ foreach ($f in $fails) {
     try { $lt = [int]$f.Properties[10].Value } catch { }
     $ip = ''
     try { $ip = [string]$f.Properties[19].Value } catch { }
-    if ($ip -and $ip -ne '-' -and $ip -ne '::1' -and $ip -notmatch '^127\.') {
+    # ignora IPs privados/loopback: nao consomem cota de threat intel
+    if ($ip -and $ip -ne '-' -and $ip -notmatch $privateRe) {
         if ($failByIp.ContainsKey($ip)) { $failByIp[$ip]++ } else { $failByIp[$ip] = 1 }
     }
     # tipos de rede: 3=Network,4=Batch,8=NetworkCleartext,9=NewCleartext,10=RDP
@@ -222,6 +227,113 @@ AddLine $L ('windows_security_defender_signature_age_days ' + $sigAge)
 AddLine $L '# HELP windows_security_defender_threats_total Ameacas registradas pelo Defender.'
 AddLine $L '# TYPE windows_security_defender_threats_total gauge'
 AddLine $L ('windows_security_defender_threats_total ' + $threats)
+
+# ---- 4b) Threat intelligence (VirusTotal + AbuseIPDB, com cache) ----
+# Consulta SOMENTE o que e novo: hash de processo desconhecido (VT) e
+# IP de falha de login (AbuseIPDB). Tudo cacheado em secintel-cache.json
+# PS 5.1 nao tem ConvertFrom-Json -AsHashtable => cache em KV texto puro.
+# Rate limit respeitado: max 3 consultas VT e 10 AbuseIPDB POR COLETA.
+$vtQuota = 3; $abQuota = 10
+$vtUsed = 0; $abUsed = 0
+$cache = @{}
+if (Test-Path $CacheFile) {
+    foreach ($ln in [System.IO.File]::ReadAllLines($CacheFile)) {
+        $i = $ln.IndexOf('=')
+        if ($i -gt 0) { $cache[$ln.Substring(0, $i)] = $ln.Substring($i + 1) }
+    }
+}
+if ($cache.Count -gt 5000) { $cache = @{} }   # seguranca: cache nao cresce pra sempre
+
+$keysFile = Join-Path $PSScriptRoot 'api-keys.ps1'
+$haveVtKey = $false; $haveAbKey = $false
+if (Test-Path $keysFile) {
+    . $keysFile
+    if ($VirusTotalApiKey) { $haveVtKey = $true }
+    if ($AbuseIpdbApiKey) { $haveAbKey = $true }
+}
+
+function Get-VtVerdict([string]$sha256, [hashtable]$cache) {
+    # devolve 'malicious' | 'suspicious' | 'clean' | 'unknown' (e usa cache)
+    if ($cache.ContainsKey("vt:$sha256")) { return $cache["vt:$sha256"] }
+    if (-not $script:haveVtKey -or $script:vtUsed -ge $script:vtQuota) { return 'unknown' }
+    try {
+        $script:vtUsed++
+        $hdrs = @{ 'x-apikey' = $VirusTotalApiKey }
+        $resp = Invoke-RestMethod -Uri "https://www.virustotal.com/api/v3/files/$sha256" -Headers $hdrs -TimeoutSec 15
+        $stats = $resp.data.attributes.last_analysis_stats
+        $mal = [int]$stats.malicious
+        $susp = [int]$stats.suspicious
+        $tot = ($mal + $susp + [int]$stats.harmless + [int]$stats.undetected + [int]$stats.timeout)
+        if ($tot -eq 0) { $v = 'unknown' }
+        elseif ($mal -ge 2) { $v = 'malicious' }
+        elseif ($mal -eq 1 -or $susp -ge 2) { $v = 'suspicious' }
+        elseif ([int]$stats.harmless -gt 0) { $v = 'clean' }
+        elseif ($mal -eq 0 -and $susp -eq 0) { $v = 'nodetections' }   # 0/68: provavelmente benigno, mas VT nao carimba "harmless"
+        else { $v = 'unknown' }
+        $cache["vt:$sha256"] = $v
+        WriteLog "VT: $sha256 -> $v (mal=$mal/$tot)"
+        return $v
+    } catch {
+        $script:vtUsed--   # falha nao consome cota
+        WriteLog "VT ERRO (hash $sha256): $($_.Exception.Message)"
+        return 'error'
+    }
+}
+
+function Get-AbuseScore([string]$ip, [hashtable]$cache) {
+    # devolve score 0-100, ou -1 (erro), ou -2 (sem quota/chave)
+    if ($cache.ContainsKey("ab:$ip")) { return [int]$cache["ab:$ip"] }
+    if (-not $script:haveAbKey -or $script:abUsed -ge $script:abQuota) { return -2 }
+    try {
+        $script:abUsed++
+        $hdrs = @{ 'Key' = $AbuseIpdbApiKey; 'Accept' = 'application/json' }
+        $resp = Invoke-RestMethod -Uri "https://api.abuseipdb.com/api/v2/check?ipAddress=$ip&maxAgeInDays=30" -Headers $hdrs -TimeoutSec 15
+        $sc = [int]$resp.data.abuseConfidenceScore
+        $cache["ab:$ip"] = $sc
+        WriteLog "AbuseIPDB: $ip -> score $sc"
+        return $sc
+    } catch {
+        $script:abUsed--
+        WriteLog "AbuseIPDB ERRO ($ip): $($_.Exception.Message)"
+        return -1
+    }
+}
+
+# --- 4b.1) VirusTotal: hashes de processos desconhecidos com conexao ---
+AddLine $L '# HELP windows_security_unknown_process_vt Verdict do VirusTotal p/ hash do processo fora da whitelist (value 1; ver label).'
+AddLine $L '# TYPE windows_security_unknown_process_vt gauge'
+if ($unknownPaths.Count -gt 0 -and $haveVtKey) {
+    foreach ($kv in $unknownPaths.GetEnumerator()) {
+        $pname = $kv.Key; $path = $kv.Value
+        if (-not (Test-Path $path)) { continue }
+        try {
+            $sha = (Get-FileHash -Path $path -Algorithm SHA256 -ErrorAction Stop).Hash.ToLower()
+        } catch { continue }
+        $verdict = Get-VtVerdict $sha $cache
+        AddLine $L ('windows_security_unknown_process_vt{process="' + (Esc $pname) + '",verdict="' + $verdict + '"} 1')
+    }
+} 
+
+# --- 4b.2) AbuseIPDB: score dos IPs que falharam login ---
+AddLine $L '# HELP windows_security_failed_login_ip_abuse_score Score de abuso (0-100) do IP de origem das falhas de login na janela.'
+AddLine $L '# TYPE windows_security_failed_login_ip_abuse_score gauge'
+if ($failByIp.Count -gt 0 -and $haveAbKey) {
+    foreach ($kv in ($failByIp.GetEnumerator() | Sort-Object Value -Descending | Select-Object -First 5)) {
+        $ip = $kv.Key
+        $score = Get-AbuseScore $ip $cache
+        if ($score -ge 0) {
+            AddLine $L ('windows_security_failed_login_ip_abuse_score{ip="' + (Esc $ip) + '",fails="' + $kv.Value + '"} ' + $score)
+        }
+    }
+}
+
+# salva cache (atomico, tmp por PID - mesma lógica do .prom)
+try {
+    $tmpc = "$CacheFile.$PID.tmp"
+    $lines2 = @($cache.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" })
+    [System.IO.File]::WriteAllLines($tmpc, $lines2)
+    Move-Item $tmpc $CacheFile -Force
+} catch { WriteLog "ERRO salvando cache TI: $($_.Exception.Message)" }
 
 # ---- 5) Metadados do coletor (canary / heartbeat) ----
 AddLine $L '# HELP windows_security_eventlog_readable 1 se o log de eventos de seguranca foi legivel nesta coleta.'
