@@ -9,9 +9,10 @@ alerting:
         - targets:
             - alertmanager:9093
 
-# Regras de alerta (arquivo separado pro estudo ficar organizado)
+# Regras de alerta (arquivos separados pra estudo organizado)
 rule_files:
   - "alertrules.yml"
+  - "security-alerts.yml"
 
 # ===== O QUE O PROMETHEUS VAI MONITORAR =====
 scrape_configs:
@@ -36,6 +37,29 @@ scrape_configs:
   - job_name: "windows_exporter"
     static_configs:
       - targets: ["host.docker.internal:9182"]
+
+  # ===== Canário de segurança de rede =====
+  # Instância dedicada do windows_exporter rodando apenas o coletor
+  # textfile (porta 9183), alimentada pelo script
+  # D:\monitoring\security-exporter\collect-security-metrics.ps1 (a cada 60s).
+  - job_name: "security_exporter"
+    static_configs:
+      - targets: ["host.docker.internal:9183"]
+    scrape_interval: 30s
+
+  # NimFlow — DESATIVADO (17/09/2026):
+  # o proxy local (localhost:3106) NAO existe mais; a producao e
+  # https://<SEU_DOMINIO_NIMFLOW>/ (VM OCI), que AINDA NAO expoe /metrics.
+  # Quando a rota /metrics for criada em prod (idealmente protegida por
+  # token, para nao ficar publica), reabilitar assim:
+  # - job_name: "nimflow"
+  #   static_configs:
+  #     - targets: ["<SEU_DOMINIO_NIMFLOW>"]   # https, porta 443 implicita
+  #   metrics_path: "/metrics"
+  #   scheme: https
+  #   authorization:
+  #     credentials: "<TOKEN>"
+  #   scrape_interval: 10s
 
   # Alertmanager
   - job_name: "alertmanager"

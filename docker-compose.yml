@@ -11,6 +11,7 @@ services:
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./prometheus/alertrules.yml:/etc/prometheus/alertrules.yml:ro
+      - ./prometheus/security-alerts.yml:/etc/prometheus/security-alerts.yml:ro
       - prometheus_data:/prometheus
     ports:
       - "9090:9090"

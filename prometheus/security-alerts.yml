@@ -1,0 +1,120 @@
+groups:
+  - name: "seguranca-rede"
+    rules:
+      # ---------- Conexões suspeitas ----------
+      - alert: "ProcessoDesconhecidoConectado"
+        expr: windows_security_external_connections{known="false"} > 0
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Processo não reconhecido com conexão ativa: {{ $labels.process }}"
+          description: >-
+            O processo '{{ $labels.process }}' tem {{ $value }} conexão(ões) TCP com IPs
+            da internet e NÃO está na whitelist. Se for um app legítimo seu, adicione-o
+            em KnownProcesses dentro de collect-security-metrics.ps1
+            (D:/monitoring/security-exporter/) e aguarde 1 min.
+
+      # ---------- Quebra de senha / invasão ----------
+      - alert: "TentativaLoginFalhoRede"
+        expr: windows_security_failed_network_logins_5m >= 3
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $value }} tentativas de login FALHAS pela rede em 5 min"
+          description: >-
+            Falhas de autenticação vindas da rede (eventos 4625, tipos 3/4/8/9/10).
+            IPs de origem: ver painel Segurança no Grafana ou
+            windows_security_failed_login_source_ip no Prometheus.
+
+      - alert: "LogonRDPRemotoDetectado"
+        expr: windows_security_rdp_logons_5m > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: "Logon RDP REMOTO bem-sucedido detectado"
+          description: >-
+            Alguém entrou nesta máquina por Remote Desktop (evento 4624 tipo 10).
+            Se não foi você, desconecte a sessão e investigue IMEDIATAMENTE
+            (verificação em 2 etapas, trocar senhas).
+
+      - alert: "LogonRemotoRedeDetectado"
+        expr: windows_security_network_logons_5m > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Logon de rede bem-sucedido (não-RDP) detectado"
+          description: >-
+            Autenticação remota bem-sucedida sobre a rede (evento 4624 tipo 3/4/8/9),
+            ex.: acesso a compartilhamento SMB. Se não foi intencional, investigue.
+
+      # ---------- Antivírus ----------
+      - alert: "DefenderProtecaoTempoRealDesligada"
+        expr: windows_security_defender_rtp_enabled == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Proteção em tempo real do antivírus está DESLIGADA"
+          description: >-
+            O Windows Defender está sem proteção em tempo real há mais de 5 minutos.
+            Máquina exposta a malware.
+
+      - alert: "AssinaturaAntivirusDesatualizada"
+        expr: windows_security_defender_signature_age_days > 7
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Assinatura de vírus com {{ $value }} dias"
+          description: >-
+            A base de assinaturas do Defender não atualiza há mais de 7 dias.
+            Rode update manual ou verifique a conexão.
+
+      - alert: "AmeacaAtivaAntivirus"
+        expr: windows_security_defender_threats_total > 0
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Ameaça registrada pelo antivírus ({{ $value }})"
+          description: >-
+            O Defender tem {{ $value }} ameaça(s) registrada(s). Abra Segurança do
+            Windows → Proteção contra vírus e verifique se foram remediadas.
+
+      # ---------- Saúde do próprio canário ----------
+      - alert: "LogSegurancaIlegivel"
+        expr: windows_security_eventlog_readable == 0
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Coletor não consegue ler o log de eventos de Segurança"
+          description: >-
+            Os eventos 4624/4625 não puderam ser lidos. Verifique se a auditoria de
+            logon está ativa: auditpol /get /subcategory:"Logon"
+
+      - alert: "ColetorSegurancaParado"
+        expr: time() - windows_security_collector_last_run_timestamp_seconds > 300
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Canário de segurança PARADO há mais de 5 min"
+          description: >-
+            O coletor não grava métricas novas. Verifique a tarefa agendada
+            'CanarioSegurancaPrometheus' (schtasks /Query) e o log
+            em D:/monitoring/security-exporter/coleta.log
+
+      - alert: "ColetorSegurancaComErro"
+        expr: windows_security_collector_success == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Coletor de segurança falhando na coleta"
+          description: >-
+            A última coleta terminou com erro. Veja
+            D:/monitoring/security-exporter/coleta.log

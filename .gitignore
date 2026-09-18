@@ -7,5 +7,12 @@ alertmanager/alertmanager.yml
 .DS_Store
 Thumbs.db
 
+# ----- Canário de segurança (runtime, não versionar) -----
+security-exporter/textfile/
+security-exporter/coleta.log
+security-exporter/grafana-pass.txt
+security-exporter/whitelist.ps1
+Documento-Grafana/README.md
+
 # ----- Docker volumes / dados -----
 # (nada aqui no momento, mas deixa preparado)

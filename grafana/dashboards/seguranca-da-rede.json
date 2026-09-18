@@ -1,0 +1,711 @@
+{
+ "dashboard": {
+  "title": "Segurança da Rede (Canário)",
+  "uid": "seguranca-rede",
+  "tags": [
+   "seguranca",
+   "canario",
+   "windows"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 41,
+  "version": 1,
+  "editable": true,
+  "refresh": "30s",
+  "time": {
+   "from": "now-3h",
+   "to": "now"
+  },
+  "panels": [
+   {
+    "id": 1,
+    "datasource": {
+     "type": "prometheus",
+     "uid": "__PROMUID__"
+    },
+    "type": "stat",
+    "title": "Conexões com a internet (agora)",
+    "gridPos": {
+     "h": 5,
+     "w": 4,
+     "x": 0,
+     "y": 0
+    },
+    "fieldConfig": {
+     "defaults": {
+      "unit": "short",
+      "mappings": [],
+      "thresholds": {
+       "mode": "absolute",
+       "steps": [
+        {
+         "color": "green",
+         "value": null
+        },
+        {
+         "color": "yellow",
+         "value": 200
+        },
+        {
+         "color": "red",
+         "value": 600
+        }
+       ]
+      }
+     },
+     "overrides": []
+    },
+    "options": {
+     "colorMode": "background",
+     "graphMode": "area",
+     "reduceOptions": {
+      "calcs": [
+       "lastNotNull"
+      ]
+     },
+     "textMode": "auto"
+    },
+    "targets": [
+     {
+      "expr": "windows_security_external_connections_all",
+      "legendFormat": "conexões",
+      "refId": "A"
+     }
+    ]
+   },
+   {
+    "id": 2,
+    "datasource": {
+     "type": "prometheus",
+     "uid": "__PROMUID__"
+    },
+    "type": "stat",
+    "title": "Conexões de processos NÃO reconhecidos",
+    "gridPos": {
+     "h": 5,
+     "w": 4,
+     "x": 4,
+     "y": 0
+    },
+    "fieldConfig": {
+     "defaults": {
+      "unit": "short",
+      "mappings": [],
+      "thresholds": {
+       "mode": "absolute",
+       "steps": [
+        {
+         "color": "green",
+         "value": null
+        },
+        {
+         "color": "red",
+         "value": 1
+        }
+       ]
+      }
+     },
+     "overrides": []
+    },
+    "options": {
+     "colorMode": "background",
+     "graphMode": "area",
+     "reduceOptions": {
+      "calcs": [
+       "lastNotNull"
+      ]
+     },
+     "textMode": "auto"
+    },
+    "targets": [
+     {
+      "expr": "windows_security_external_connections_unknown_total",
+      "legendFormat": "desconhecidas",
+      "refId": "A"
+     }
+    ]
+   },
+   {
+    "id": 3,
+    "datasource": {
+     "type": "prometheus",
+     "uid": "__PROMUID__"
+    },
+    "type": "stat",
+    "title": "Tentativas de login FALHAS (5 min)",
+    "gridPos": {
+     "h": 5,
+     "w": 4,
+     "x": 8,
+     "y": 0
+    },
+    "fieldConfig": {
+     "defaults": {
+      "unit": "short",
+      "mappings": [],
+      "thresholds": {
+       "mode": "absolute",
+       "steps": [
+        {
+         "color": "green",
+         "value": null
+        },
+        {
+         "color": "yellow",
+         "value": 3
+        },
+        {
+         "color": "red",
+         "value": 10
+        }
+       ]
+      }
+     },
+     "overrides": []
+    },
+    "options": {
+     "colorMode": "background",
+     "graphMode": "area",
+     "reduceOptions": {
+      "calcs": [
+       "lastNotNull"
+      ]
+     },
+     "textMode": "auto"
+    },
+    "targets": [
+     {
+      "expr": "windows_security_failed_logins_5m",
+      "legendFormat": "falhas",
+      "refId": "A"
+     }
+    ]
+   },
+   {
+    "id": 4,
+    "datasource": {
+     "type": "prometheus",
+     "uid": "__PROMUID__"
+    },
+    "type": "stat",
+    "title": "Logons RDP remotos (5 min)",
+    "gridPos": {
+     "h": 5,
+     "w": 4,
+     "x": 12,
+     "y": 0
+    },
+    "fieldConfig": {
+     "defaults": {
+      "unit": "short",
+      "mappings": [],
+      "thresholds": {
+       "mode": "absolute",
+       "steps": [
+        {
+         "color": "green",
+         "value": null
+        },
+        {
+         "color": "red",
+         "value": 1
+        }
+       ]
+      }
+     },
+     "overrides": []
+    },
+    "options": {
+     "colorMode": "background",
+     "graphMode": "area",
+     "reduceOptions": {
+      "calcs": [
+       "lastNotNull"
+      ]
+     },
+     "textMode": "auto"
+    },
+    "targets": [
+     {
+      "expr": "windows_security_rdp_logons_5m",
+      "legendFormat": "RDP",
+      "refId": "A"
+     }
+    ]
+   },
+   {
+    "id": 5,
+    "datasource": {
+     "type": "prometheus",
+     "uid": "__PROMUID__"
+    },
+    "type": "stat",
+    "title": "Defender: proteção em tempo real",
+    "gridPos": {
+     "h": 5,
+     "w": 4,
+     "x": 16,
+     "y": 0
+    },
+    "fieldConfig": {
+     "defaults": {
+      "unit": "short",
+      "mappings": [
+       {
+        "type": "value",
+        "options": {
+         "1": {
+          "color": "green",
+          "text": "ATIVA"
+         },
+         "0": {
+          "color": "red",
+          "text": "DESLIGADA"
+         },
+         "-1": {
+          "color": "orange",
+          "text": "ERRO"
+         }
+        }
+       }
+      ],
+      "thresholds": {
+       "mode": "absolute",
+       "steps": [
+        {
+         "color": "red",
+         "value": null
+        },
+        {
+         "color": "green",
+         "value": 1
+        }
+       ]
+      }
+     },
+     "overrides": []
+    },
+    "options": {
+     "colorMode": "background",
+     "graphMode": "area",
+     "reduceOptions": {
+      "calcs": [
+       "lastNotNull"
+      ]
+     },
+     "textMode": "auto"
+    },
+    "targets": [
+     {
+      "expr": "windows_security_defender_rtp_enabled",
+      "legendFormat": "RTP",
+      "refId": "A"
+     }
+    ]
+   },
+   {
+    "id": 6,
+    "datasource": {
+     "type": "prometheus",
+     "uid": "__PROMUID__"
+    },
+    "type": "stat",
+    "title": "Assinatura antivírus (dias)",
+    "gridPos": {
+     "h": 5,
+     "w": 4,
+     "x": 20,
+     "y": 0
+    },
+    "fieldConfig": {
+     "defaults": {
+      "unit": "short",
+      "mappings": [],
+      "thresholds": {
+       "mode": "absolute",
+       "steps": [
+        {
+         "color": "green",
+         "value": null
+        },
+        {
+         "color": "yellow",
+         "value": 3
+        },
+        {
+         "color": "red",
+         "value": 7
+        }
+       ]
+      }
+     },
+     "overrides": []
+    },
+    "options": {
+     "colorMode": "background",
+     "graphMode": "area",
+     "reduceOptions": {
+      "calcs": [
+       "lastNotNull"
+      ]
+     },
+     "textMode": "auto"
+    },
+    "targets": [
+     {
+      "expr": "windows_security_defender_signature_age_days",
+      "legendFormat": "dias",
+      "refId": "A"
+     }
+    ]
+   },
+   {
+    "id": 7,
+    "datasource": {
+     "type": "prometheus",
+     "uid": "__PROMUID__"
+    },
+    "type": "timeseries",
+    "title": "Conexões com a internet por processo",
+    "gridPos": {
+     "h": 8,
+     "w": 12,
+     "x": 0,
+     "y": 5
+    },
+    "fieldConfig": {
+     "defaults": {
+      "unit": "short",
+      "custom": {
+       "drawStyle": "line",
+       "fillOpacity": 12,
+       "lineInterpolation": "smooth",
+       "showPoints": "never",
+       "spanNulls": true
+      }
+     },
+     "overrides": []
+    },
+    "options": {
+     "legend": {
+      "calcs": [
+       "lastNotNull",
+       "max"
+      ],
+      "displayMode": "table",
+      "placement": "right"
+     },
+     "tooltip": {
+      "mode": "multi"
+     }
+    },
+    "targets": [
+     {
+      "expr": "sum by (process) (windows_security_external_connections)",
+      "legendFormat": "{{process}}",
+      "refId": "A"
+     }
+    ]
+   },
+   {
+    "id": 8,
+    "datasource": {
+     "type": "prometheus",
+     "uid": "__PROMUID__"
+    },
+    "type": "timeseries",
+    "title": "Processos DESCONHECIDOS com conexão ativa (alerta em >0)",
+    "gridPos": {
+     "h": 8,
+     "w": 12,
+     "x": 12,
+     "y": 5
+    },
+    "fieldConfig": {
+     "defaults": {
+      "unit": "short",
+      "custom": {
+       "drawStyle": "line",
+       "fillOpacity": 12,
+       "lineInterpolation": "smooth",
+       "showPoints": "never",
+       "spanNulls": true
+      }
+     },
+     "overrides": []
+    },
+    "options": {
+     "legend": {
+      "calcs": [
+       "lastNotNull",
+       "max"
+      ],
+      "displayMode": "table",
+      "placement": "right"
+     },
+     "tooltip": {
+      "mode": "multi"
+     }
+    },
+    "targets": [
+     {
+      "expr": "windows_security_external_connections{known=\"false\"}",
+      "legendFormat": "{{process}}",
+      "refId": "A"
+     },
+     {
+      "expr": "windows_security_unknown_process_info",
+      "legendFormat": "info: {{process}}",
+      "refId": "B"
+     }
+    ]
+   },
+   {
+    "id": 9,
+    "datasource": {
+     "type": "prometheus",
+     "uid": "__PROMUID__"
+    },
+    "type": "table",
+    "title": "Falhas de login por IP de origem (5 min)",
+    "gridPos": {
+     "h": 8,
+     "w": 12,
+     "x": 0,
+     "y": 13
+    },
+    "fieldConfig": {
+     "defaults": {},
+     "overrides": []
+    },
+    "options": {
+     "showHeader": true
+    },
+    "targets": [
+     {
+      "expr": "windows_security_failed_login_source_ip",
+      "format": "table",
+      "instant": true,
+      "refId": "A"
+     }
+    ]
+   },
+   {
+    "id": 10,
+    "datasource": {
+     "type": "prometheus",
+     "uid": "__PROMUID__"
+    },
+    "type": "table",
+    "title": "Portas TCP abertas fora do loopback (agora)",
+    "gridPos": {
+     "h": 8,
+     "w": 12,
+     "x": 12,
+     "y": 13
+    },
+    "fieldConfig": {
+     "defaults": {},
+     "overrides": []
+    },
+    "options": {
+     "showHeader": true
+    },
+    "targets": [
+     {
+      "expr": "windows_security_listen_ports",
+      "format": "table",
+      "instant": true,
+      "refId": "A"
+     }
+    ]
+   },
+   {
+    "id": 11,
+    "datasource": {
+     "type": "prometheus",
+     "uid": "__PROMUID__"
+    },
+    "type": "timeseries",
+    "title": "Canário: segundos desde a última coleta (saudável <60s)",
+    "gridPos": {
+     "h": 8,
+     "w": 8,
+     "x": 0,
+     "y": 21
+    },
+    "fieldConfig": {
+     "defaults": {
+      "unit": "s",
+      "custom": {
+       "drawStyle": "stepAfter",
+       "fillOpacity": 10,
+       "lineInterpolation": "smooth",
+       "showPoints": "never",
+       "spanNulls": true
+      },
+      "thresholds": {
+       "mode": "absolute",
+       "steps": [
+        {
+         "color": "green",
+         "value": null
+        },
+        {
+         "color": "yellow",
+         "value": 120
+        },
+        {
+         "color": "red",
+         "value": 300
+        }
+       ]
+      }
+     },
+     "overrides": []
+    },
+    "options": {
+     "legend": {
+      "calcs": [
+       "lastNotNull",
+       "max"
+      ],
+      "displayMode": "table",
+      "placement": "right"
+     },
+     "tooltip": {
+      "mode": "multi"
+     }
+    },
+    "targets": [
+     {
+      "expr": "time() - windows_security_collector_last_run_timestamp_seconds",
+      "legendFormat": "desde última coleta",
+      "refId": "A"
+     }
+    ]
+   },
+   {
+    "id": 12,
+    "datasource": {
+     "type": "prometheus",
+     "uid": "__PROMUID__"
+    },
+    "type": "stat",
+    "title": "Ameaças registradas no Defender",
+    "gridPos": {
+     "h": 8,
+     "w": 8,
+     "x": 8,
+     "y": 21
+    },
+    "fieldConfig": {
+     "defaults": {
+      "unit": "short",
+      "mappings": [],
+      "thresholds": {
+       "mode": "absolute",
+       "steps": [
+        {
+         "color": "green",
+         "value": null
+        },
+        {
+         "color": "red",
+         "value": 1
+        }
+       ]
+      }
+     },
+     "overrides": []
+    },
+    "options": {
+     "colorMode": "background",
+     "graphMode": "area",
+     "reduceOptions": {
+      "calcs": [
+       "lastNotNull"
+      ]
+     },
+     "textMode": "auto"
+    },
+    "targets": [
+     {
+      "expr": "windows_security_defender_threats_total",
+      "legendFormat": "ameaças",
+      "refId": "A"
+     }
+    ]
+   },
+   {
+    "id": 13,
+    "datasource": {
+     "type": "prometheus",
+     "uid": "__PROMUID__"
+    },
+    "type": "stat",
+    "title": "Última coleta do canário",
+    "gridPos": {
+     "h": 8,
+     "w": 8,
+     "x": 16,
+     "y": 21
+    },
+    "fieldConfig": {
+     "defaults": {
+      "unit": "short",
+      "mappings": [
+       {
+        "type": "value",
+        "options": {
+         "1": {
+          "color": "green",
+          "text": "SEM ERRO"
+         },
+         "0": {
+          "color": "red",
+          "text": "COM ERRO"
+         }
+        }
+       }
+      ],
+      "thresholds": {
+       "mode": "absolute",
+       "steps": [
+        {
+         "color": "red",
+         "value": null
+        },
+        {
+         "color": "green",
+         "value": 1
+        }
+       ]
+      }
+     },
+     "overrides": []
+    },
+    "options": {
+     "colorMode": "background",
+     "graphMode": "area",
+     "reduceOptions": {
+      "calcs": [
+       "lastNotNull"
+      ]
+     },
+     "textMode": "auto"
+    },
+    "targets": [
+     {
+      "expr": "windows_security_collector_success",
+      "legendFormat": "coleta",
+      "refId": "A"
+     }
+    ]
+   }
+  ]
+ },
+ "folderId": 0,
+ "overwrite": true,
+ "message": "Importado pelo canario de seguranca (Hermes)"
+}
