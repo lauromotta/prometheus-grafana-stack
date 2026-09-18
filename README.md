@@ -894,10 +894,16 @@ Decisões de projeto:
 ### 9.5 Limitações honestas
 
 - **Uma máquina só** — cobre este Windows, não o roteador nem a VM de produção.
-- **Sinal ≠ detecção** — um atacante que só usa processos whitelisted
-  (*living off the land*) não dispara nada. Próximo nível: Sysmon + eventos de
-  processo com linha de comando.
+  Próximo passo: telemetria de rede (NetFlow/honeypot) ou monitorar a VM com
+  seu próprio exporter.
+- **Sinal ≠ detecção** — a threat intelligence (9.4) já fecha **parte** do buraco:
+  binário *novo* e maligno conectando é pego automaticamente pelo hash no
+  VirusTotal, sem intervenção. O que passa: um atacante que só usa binários
+  legítimos/assinados (*living off the land* — powershell, certutil, mshta),
+  porque hash de binário legítimo é sempre "limpo". Próximo nível: auditoria
+  de criação de processo (evento 4688 com linha de comando) e/ou Sysmon.
 - **Falsos positivos são o design** — app novo instalado = alerta. O fluxo é:
-  chegar warning no Telegram → reconhecer o app → uma linha na whitelist.
+  chegar warning no Telegram → reconhecer o app → uma linha na whitelist
+  (→ veredito `nodetections`/`clean` do VT ajuda a decidir com evidência).
 - Os alertas dependem da **auditoria de logon ativa** no Windows; a métrica
   `windows_security_eventlog_readable` delata se ela estiver desligada.
