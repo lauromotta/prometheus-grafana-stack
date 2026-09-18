@@ -19,6 +19,7 @@ aplicar esse conhecimento em ambiente corporativo. Cada seção registra não s�
 6. [Windows Exporter](#6-windows-exporter)
 7. [Troubleshooting (erros reais encontrados)](#7-troubleshooting-erros-reais-encontrados)
 8. [Alertas e notificações (Alertmanager + Telegram)](#8-alertas-e-notificações-alertmanager--telegram)
+9. [Segurança da rede — Canário de intrusão](#9-segurança-da-rede--canário-de-intrusão)
 
 ---
 
@@ -96,6 +97,7 @@ do arquivo `prometheus.yml`.
 | **cAdvisor** | Métricas dos containers Docker | 8080 | http://localhost:8080 |
 | **Node Exporter** | Métricas do SO Linux (host) | 9100 | http://localhost:9100 |
 | **Windows Exporter** | Métricas do SO Windows (host físico) | 9182 | http://localhost:9182 |
+| **Windows Exporter (segurança)** | Métricas do canário de segurança (textfile) | 9183 | http://localhost:9183 |
 | **Alertmanager** | Roteamento de alertas | 9093 | http://localhost:9093 |
 
 > **Nota importante:** o "Node Exporter" coleta métricas do *host Linux*. No nosso
@@ -110,12 +112,20 @@ do arquivo `prometheus.yml`.
 
 ```
 D:\monitoring\
-├── docker-compose.yml
+├── docker-compose.yml         # a stack (Prometheus, Grafana, Alertmanager, exporters)
 ├── prometheus\
-│   ├── prometheus.yml      # config de coleta (scrape configs)
-│   └── alertrules.yml      # regras de alerta
-└── alertmanager\
-    └── alertmanager.yml    # roteamento de notificações
+│   ├── prometheus.yml         # config de coleta (scrape configs)
+│   ├── alertrules.yml         # alertas básicos (instância, CPU, memória, disco)
+│   └── security-alerts.yml    # alertas do canário de segurança
+├── alertmanager\
+│   └── alertmanager.yml       # roteamento de notificações (NÃO versionado: tem token)
+├── security-exporter\         # canário de segurança
+│   ├── collect-security-metrics.ps1   # coletor (roda a cada 60s via Task Scheduler)
+│   ├── ativar-canario.ps1             # ativação única (sobe tudo, importa dashboard)
+│   └── parse-and-run.ps1              # valida sintaxe antes de ativar
+├── grafana\dashboards\        # dashboards em JSON (importáveis via API)
+│   └── seguranca-da-rede.json
+└── docs\images\               # capturas dos dashboards para esta documentação
 ```
 
 ### 3.2 docker-compose.yml
@@ -399,6 +409,13 @@ visualization"** no painel lateral direito.
 
 ### 5.3 Dashboard "Saúde do Windows" — 4 painéis
 
+![Dashboard Saúde do Windows](docs/images/dashboard-saude-windows.png)
+
+*O que este dashboard responde:* **"a máquina está saudável agora?"** — os
+quatro sinais clássicos de hardware: CPU (saturação), memória (esgotamento),
+disco (capacidade por volume) e rede (tráfego download/upload por interface).
+A captura acima é de um dia comum de operação local.
+
 | Painel | Query PromQL | Tipo de visualização |
 |---|---|---|
 | CPU - % de uso | (ver 5.4) | Stat com sparkline |
@@ -508,7 +525,7 @@ winget install --id Prometheus.WindowsExporter --silent --accept-package-agreeme
 ### 6.3 Registrar como serviço (requer PowerShell como Admin)
 
 ```powershell
-sc.exe create windows_exporter binPath= "`"C:\Users\lauro\AppData\Local\Microsoft\WinGet\Packages\Prometheus.WindowsExporter_Microsoft.Winget.Source_8wekyb3d8bbwe\windows_exporter.exe`" --web.listen-address=:9182" start= auto DisplayName= "Windows Exporter (Prometheus)"
+sc.exe create windows_exporter binPath= "`"%LOCALAPPDATA%\Microsoft\WinGet\Packages\Prometheus.WindowsExporter_...\windows_exporter.exe`" --web.listen-address=:9182" start= auto DisplayName= "Windows Exporter (Prometheus)"
 
 sc.exe start windows_exporter
 sc.exe query windows_exporter   # deve mostrar STATE: 4 RUNNING
@@ -617,12 +634,12 @@ container (conceito). Para o **Windows físico**, usa-se o Windows Exporter.
 `docker` não está no PATH do bash (Git Bash/MSYS). O executável fica em:
 
 ```
-C:\Users\lauro\AppData\Local\Programs\DockerDesktop\resources\bin\docker.exe
+%LOCALAPPDATA%\Programs\DockerDesktop\resources\bin\docker.exe
 ```
 
 Exportar antes de usar:
 ```bash
-export PATH="/c/Users/lauro/AppData/Local/Programs/DockerDesktop/resources/bin:$PATH"
+export PATH="$(cygpath "$LOCALAPPDATA")/Programs/DockerDesktop/resources/bin:$PATH"
 ```
 
 ### 7.7 `--reload` não aplica volume novo no Prometheus
@@ -754,3 +771,105 @@ curl -X POST http://localhost:9090/-/reload
 # Alertmanager: recarregar config
 docker restart alertmanager
 ```
+
+---
+
+## 9. Segurança da rede — Canário de intrusão
+
+> **O que é:** um monitor de segurança caseiro, construído **só com o que a stack
+> já tinha** (PowerShell + textfile collector + Prometheus + Alertmanager), sem
+> instalar nenhum software de segurança. Ele observa a máquina Windows e manda
+> alertas no Telegram quando o comportamento dela muda de forma suspeita.
+> **Não é um EDR** — é um *canário*: sinaliza o que é novo/desconhecido.
+
+![Dashboard Segurança da Rede (Canário)](docs/images/dashboard-seguranca-rede.png)
+
+### 9.1 O que ele monitora e como
+
+O Prometheus não lê eventos de segurança do Windows nativamente. A solução é um
+**coletor customizado** (`security-exporter/collect-security-metrics.ps1`) que
+roda a cada 60s via Agendador de Tarefas (invisível, sem janela) e traduz três
+fontes nativas do Windows em métricas Prometheus:
+
+| Fonte de dados | Cmdlets | O que revela |
+|---|---|---|
+| Tabela de conexões TCP | `Get-NetTCPConnection` | quais processos falam com a internet agora |
+| Log de eventos Security | `Get-WinEvent` (4624/4625) | logons remotos (RDP/SMB) e tentativas de senha |
+| Windows Defender | `Get-MpComputerStatus` | antivírus ligado, base atualizada, ameaças |
+
+O fluxo é o padrão *textfile collector* do ecossistema Prometheus (o mesmo que o
+node_exporter usa no Linux):
+
+```
+Task Scheduler (60s) ──▶ collect-security-metrics.ps1 ──▶ security-metrics.prom
+                              (ler fontes Windows)            (formato textfile)
+                                                                      │
+                       Prometheus ◀── scrape :9183 ◀── windows_exporter (instância
+                              │                                        dedicada, textfile)
+                              ▼
+                        regras (security-alerts.yml)
+                              ▼
+                 Alertmanager ──▶ Telegram
+```
+
+Duas decisões de projeto valem registro:
+
+1. **Instância dedicada do exporter (`:9183`)** — o serviço nativo (`:9182`)
+   não tem o collector textfile habilitado, e mexer nele exigiria PowerShell
+   elevado. Uma segunda instância só com `--collectors.enabled=textfile` resolve
+   sem admin — e o próprio coletor a reinicia se ela cair (*auto-healing*: o
+   script verifica e sobe o processo se o `/metrics` não responder).
+2. **Whitelist externa** (`security-exporter/whitelist.ps1`, **não
+   versionado**) — a lista de processos autorizados é um inventário pessoal de
+   software, então fica fora do repositório (modelo em `whitelist.example.ps1`).
+   O alerta `ProcessoDesconhecidoConectado` dispara para qualquer processo fora
+   da lista; adicionar um app novo é editar uma linha e esperar 60s.
+
+### 9.2 Painéis do dashboard
+
+| Painel | O que responde |
+|---|---|
+| Conexões com a internet (agora) | quantas conexões TCP externas existem neste instante |
+| Conexões de processos NÃO reconhecidos | **o número que precisa ser 0** — se subir, há um processo novo falando com a rede |
+| Falhas de login (5 min) | se alguém está tentando senhas (evento 4625) |
+| Logons RDP remotos (5 min) | **se alguém entrou por Remote Desktop** — crítico se você não ativou RDP |
+| Defender: proteção em tempo real | se o antivírus foi desligado (atacantes fazem isso primeiro) |
+| Assinatura antivírus (dias) | se a base de vírus está atualizada |
+| Falhas por IP de origem | de onde vêm as tentativas de senha |
+| Portas TCP abertas | o que está escutando conexões na sua máquina |
+| Canário: segundos desde a última coleta | **o watch-dog**: se o monitor morrer em silêncio, este painel delata |
+| Última coleta / Ameaças | saúde do próprio coletor e do Defender |
+
+> Os painéis de processos da captura estão propositalmente pixelados: a lista de
+> processos de uma máquina real é dados pessoais.
+
+### 9.3 Regras de alerta (`prometheus/security-alerts.yml`)
+
+| Alerta | Gatilho | Severidade |
+|---|---|---|
+| `ProcessoDesconhecidoConectado` | processo fora da whitelist com conexão externa por 3 min | warning |
+| `TentativaLoginFalhoRede` | ≥3 falhas de login pela rede em 5 min (password spraying) | warning |
+| `LogonRDPRemotoDetectado` | qualquer logon RDP remoto bem-sucedido | **critical** |
+| `LogonRemotoRedeDetectado` | logon de rede não-RDP (ex.: compartilhamento SMB) | warning |
+| `DefenderProtecaoTempoRealDesligada` | proteção em tempo real off por 5 min | **critical** |
+| `AssinaturaAntivirusDesatualizada` | base de vírus com >7 dias | warning |
+| `AmeacaAtivaAntivirus` | ameaça registrada pelo Defender | **critical** |
+| `LogSegurancaIlegivel` | log Security ilegível (auditoria desligada?) | warning |
+| `ColetorSegurancaParado` | sem coleta nova há >5 min (watch-dog) | warning |
+| `ColetorSegurancaComErro` | coleta terminando com erro | warning |
+
+O watch-dog merece nota: `time() - windows_security_collector_last_run_timestamp_seconds > 300`
+é a resposta à pergunta clássica de SRE — *"como você sabe que seu monitoramento
+está funcionando?"*. **Um monitor que morre em silêncio é pior que não ter
+monitor.**
+
+### 9.4 Limitações honestas
+
+- **Uma máquina só** — cobre este Windows, não o roteador nem a VM de produção.
+- **Sinal ≠ detecção** — um atacante que só usa processos whitelisted
+  (*living off the land*) não dispara nada. Próximo nível: Sysmon + eventos de
+  processo com linha de comando.
+- **Falsos positivos são o design** — app novo instalado = alerta. O fluxo é:
+  chegar warning no Telegram → reconhecer o app → uma linha na whitelist.
+- Os alertas dependem da **auditoria de logon ativa** no Windows; a métrica
+  `windows_security_eventlog_readable` delata se ela estiver desligada.
