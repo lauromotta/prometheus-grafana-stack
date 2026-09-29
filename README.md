@@ -3,6 +3,13 @@
 > Stack de monitoramento local para estudo e implementação em rede própria.
 > Autor: Lauro Motta · Início: setembro/2026
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-2e8b57.svg)](LICENSE)
+[![Docker Compose](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](docker-compose.yml)
+[![Prometheus](https://img.shields.io/badge/Prometheus-2496ED?logo=prometheus&logoColor=white)](http://localhost:9090)
+[![Grafana](https://img.shields.io/badge/Grafana-F46801?logo=grafana&logoColor=white)](http://localhost:3000)
+[![Alertmanager](https://img.shields.io/badge/Alertmanager-E8024F?logo=prometheus&logoColor=white)](http://localhost:9093)
+[![GitHub stars](https://img.shields.io/badge/%E2%AD%90-0%20stars-2e8b57.svg)](https://github.com/lauromotta/prometheus-grafana-stack/stargazers)
+
 ## Sobre esta documentação
 
 Documentação do stack de observabilidade montado para estudo, com o objetivo de
